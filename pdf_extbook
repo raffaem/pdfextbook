@@ -1,0 +1,122 @@
+#!/usr/bin/env python3
+# Copyright 2024 Raffaele Mancuso
+# SPDX-License-Identifier: MIT
+
+# Extract PDF pages on bookmark boundaries
+
+import subprocess
+import tempfile
+import os
+import readline
+import argparse
+
+
+# Ask for user input with a pre-filled  default value
+def rlinput(prompt, prefill=''):
+    readline.set_startup_hook(lambda: readline.insert_text(prefill))
+    try:
+        return input(prompt)  # or raw_input in Python 2
+    finally:
+        readline.set_startup_hook()
+
+# Main
+
+
+parser = argparse.ArgumentParser(
+    prog='pdf_extbook',
+    description='Extract PDF pages on bookmark boundaries')
+parser.add_argument(
+    '-m',
+    '--max-level',
+    help="Max bookmark level the user can choose from (levels start from 1).",
+    default=10,
+    type=int,
+)
+parser.add_argument(
+    'file',
+    help="The PDF file from which to extract bookmarks.",
+)
+args = parser.parse_args()
+
+# Use pdftk to extract bookmarks from PDF
+cmd = ["pdftk", args.file, "dump_data_utf8"]
+bl = subprocess.run(cmd, text=True, capture_output=True).stdout.splitlines()
+bl = [x for x in bl if x.startswith("Bookmark")]
+
+# Ask user which bookmark to extract
+tag_title = "BookmarkTitle: "
+tag_level = "BookmarkLevel: "
+tag_page = "BookmarkPageNumber: "
+curr_lev = [0]*10
+
+titles = [x[len(tag_title):] for x in bl if x.startswith(tag_title)]
+levels = [int(x[len(tag_level):]) for x in bl if x.startswith(tag_level)]
+pages = [int(x[len(tag_page):]) for x in bl if x.startswith(tag_page)]
+assert (len(titles) == len(levels))
+assert (len(titles) == len(pages))
+
+with tempfile.NamedTemporaryFile("w") as input_file:
+    with tempfile.NamedTemporaryFile("r") as output_file:
+
+        # Write bookmarks in a file that will be read by fzf
+        for i, (title, level, start_page) in enumerate(zip(titles, levels, pages)):
+            if args.max_level < int(level):
+                continue
+            level_eff = int(level) - 1
+            curr_lev[level_eff] += 1
+            curr_lev[level_eff+1:len(curr_lev)] = [0]*(len(curr_lev)-level_eff)
+            curr_lev_str = curr_lev[0:level_eff+1]
+            curr_lev_str = [str(x) for x in curr_lev_str]
+            curr_lev_str = ".".join(curr_lev_str)
+            try:
+                pos = levels[i+1:].index(level)+i+1
+                end_page = pages[pos]-1
+            except ValueError:
+                end_page = ""
+            input_file.write(
+                "["+curr_lev_str+"] " +
+                title +
+                " ["+str(start_page)+"-"+str(end_page)+"]\n",
+            )
+        input_file.flush()
+
+        # Ask user which bookmark to extract with fzf
+        os.system(
+            "fzf --reverse "
+            f"< \"{input_file.name}\" "
+            f"> \"{output_file.name}\"")
+        # Read user choice from file
+        choice = output_file.read().strip()
+
+# Get page boundaries
+pages = choice.split(" ")[-1][1:-1].split("-")
+start_page, end_page = pages
+
+# Ask user for output file
+pos = len(choice) - choice[::-1].index("[")
+proposal = choice[:pos-2]
+proposal = proposal[:20].replace(" ", "_") \
+                        .replace("[", "") \
+                        .replace("]", "") \
+                        .replace(".", "_") \
+                        .replace(":", "")
+proposal += ".pdf"
+outfp = rlinput("Output file: ", proposal)
+
+# Actually extract the pages
+cmd = [
+    "pdftk",
+    args.file,
+    "cat",
+    str(start_page)+"-"+str(end_page),
+    "output",
+    outfp
+]
+subprocess.run(cmd)
+
+# DEBUG
+# print(pos)
+# print(level)
+# print(start_page)
+# print(end_page)
+# print(cmd)
