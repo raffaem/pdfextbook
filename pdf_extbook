@@ -29,7 +29,14 @@ parser.add_argument(
     '-m',
     '--max-level',
     help="Max bookmark level the user can choose from (levels start from 1).",
-    default=10,
+    default=None,
+    type=int,
+)
+parser.add_argument(
+    '-e',
+    '--exact-level',
+    help="Exact bookmark level the user can choose from (levels start from 1).",
+    default=None,
     type=int,
 )
 parser.add_argument(
@@ -60,7 +67,9 @@ with tempfile.NamedTemporaryFile("w") as input_file:
 
         # Write bookmarks in a file that will be read by fzf
         for i, (title, level, start_page) in enumerate(zip(titles, levels, pages)):
-            if args.max_level < int(level):
+            if args.max_level and args.max_level < int(level):
+                continue
+            if args.exact_level and args.exact_level != int(level):
                 continue
             level_eff = int(level) - 1
             curr_lev[level_eff] += 1
