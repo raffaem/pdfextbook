@@ -10,6 +10,7 @@ import os
 import readline
 import argparse
 import re
+from pathlib import Path
 
 
 # Ask for user input with a pre-filled default value
@@ -75,17 +76,17 @@ tag_page = "BookmarkPageNumber: "
 curr_lev = [0] * 10
 
 titles = [
-    x[len(tag_title) :]
+    x[len(tag_title):]
     for x in bl
     if x.startswith(tag_title)
 ]
 levels = [
-    int(x[len(tag_level) :])
+    int(x[len(tag_level):])
     for x in bl
     if x.startswith(tag_level)
 ]
 pages = [
-    int(x[len(tag_page) :])
+    int(x[len(tag_page):])
     for x in bl
     if x.startswith(tag_page)
 ]
@@ -111,17 +112,17 @@ with tempfile.NamedTemporaryFile("w") as input_file:
                 continue
             level_eff = int(level) - 1
             curr_lev[level_eff] += 1
-            curr_lev[level_eff + 1 : len(curr_lev)] = [
+            curr_lev[level_eff + 1: len(curr_lev)] = [
                 0
             ] * (len(curr_lev) - level_eff)
-            curr_lev_str = curr_lev[0 : level_eff + 1]
+            curr_lev_str = curr_lev[0: level_eff + 1]
             curr_lev_str = [
                 str(x) for x in curr_lev_str
             ]
             curr_lev_str = ".".join(curr_lev_str)
             try:
                 pos = (
-                    levels[i + 1 :].index(level)
+                    levels[i + 1:].index(level)
                     + i
                     + 1
                 )
@@ -173,6 +174,9 @@ proposal = (
 )
 proposal += ".pdf"
 outfp = rlinput("Output file: ", proposal)
+outfp = Path(outfp)
+outfp = outfp.resolve()
+print(f"Saving to: `{outfp}`")
 
 # Actually extract the pages
 
@@ -184,8 +188,9 @@ if args.extraction_engine == "pdftk":
         "cat",
         str(start_page) + "-" + str(end_page),
         "output",
-        outfp,
+        str(outfp),
     ]
+    res = subprocess.run(cmd)
 
 elif args.extraction_engine == "qpdf":
     print("Using qpdf to extract pages")
@@ -198,6 +203,7 @@ elif args.extraction_engine == "qpdf":
         "--",
         outfp,
     ]
+    res = subprocess.run(cmd)
 
 elif args.extraction_engine == "pdfjam":
     print("Using pdfjam to extract pages")
@@ -208,10 +214,12 @@ elif args.extraction_engine == "pdfjam":
         "-o",
         outfp,
     ]
-    subprocess.run(cmd)
+    res = subprocess.run(cmd)
 
 else:
     raise Exception("Unsupported extraction engine")
+
+assert (res.returncode == 0)
 
 # DEBUG
 # print(pos)
