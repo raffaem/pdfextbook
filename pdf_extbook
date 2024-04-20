@@ -11,6 +11,15 @@ import readline
 import argparse
 import re
 from pathlib import Path
+from dataclasses import dataclass
+
+
+@dataclass
+class Bookmark:
+    title: str
+    level: int
+    start_page: int
+    end_page: int
 
 
 # Ask for user input with a pre-filled default value
@@ -28,7 +37,7 @@ def rlinput(prompt, prefill=""):
 
 # Main
 
-
+# Parse command line arguments
 parser = argparse.ArgumentParser(
     prog="pdf_extbook",
     description="Extract PDF pages on bookmark boundaries",
@@ -63,63 +72,50 @@ parser.add_argument(
 args = parser.parse_args()
 
 # Use pdftk to extract bookmarks from PDF
+print("Extracting bookmarks...")
 cmd = ["pdftk", args.file, "dump_data_utf8"]
 bl = subprocess.run(
     cmd, text=True, capture_output=True
 ).stdout.splitlines()
 bl = [x for x in bl if x.startswith("Bookmark")]
+bl2 = "\n".join(bl)
 
-# Ask user which bookmark to extract
+# Process bookmarks
 tag_title = "BookmarkTitle: "
 tag_level = "BookmarkLevel: "
 tag_page = "BookmarkPageNumber: "
-curr_lev = [0] * 10
 
-titles = [
-    x[len(tag_title):]
-    for x in bl
-    if x.startswith(tag_title)
-]
-levels = [
-    int(x[len(tag_level):])
-    for x in bl
-    if x.startswith(tag_level)
-]
-pages = [
-    int(x[len(tag_page):])
-    for x in bl
-    if x.startswith(tag_page)
-]
+pat = tag_title + "(.+?)\n" + tag_level + "(.+?)\n" + tag_page + "(.+?)$"
+
+titles = list()
+levels = list()
+pages = list()
+for m in re.finditer(pat, bl2, re.MULTILINE):
+    title = m.group(1)
+    level = int(m.group(2))
+    page = int(m.group(3))
+    titles.append(title)
+    levels.append(level)
+    pages.append(page)
+
 assert len(titles) == len(levels)
 assert len(titles) == len(pages)
 
 with tempfile.NamedTemporaryFile("w") as input_file:
-    with tempfile.NamedTemporaryFile(
-        "r"
-    ) as output_file:
+    with tempfile.NamedTemporaryFile("r") as output_file:
+        it = enumerate(zip(titles, levels, pages))
         # Write bookmarks in a file that will be read by fzf
-        for i, (title, level, start_page) in enumerate(
-            zip(titles, levels, pages)
-        ):
-            if args.max_level and args.max_level < int(
-                level
+        for i, (title, level, start_page) in it:
+            if (
+                args.max_level
+                and level > args.max_level
             ):
                 continue
             if (
                 args.exact_level
-                and args.exact_level != int(level)
+                and level != args.exact_level
             ):
                 continue
-            level_eff = int(level) - 1
-            curr_lev[level_eff] += 1
-            curr_lev[level_eff + 1: len(curr_lev)] = [
-                0
-            ] * (len(curr_lev) - level_eff)
-            curr_lev_str = curr_lev[0: level_eff + 1]
-            curr_lev_str = [
-                str(x) for x in curr_lev_str
-            ]
-            curr_lev_str = ".".join(curr_lev_str)
             try:
                 pos = (
                     levels[i + 1:].index(level)
@@ -128,12 +124,9 @@ with tempfile.NamedTemporaryFile("w") as input_file:
                 )
                 end_page = pages[pos] - 1
             except ValueError:
-                end_page = ""
+                end_page = None
             input_file.write(
-                "["
-                + curr_lev_str
-                + "] "
-                + title
+                title
                 + " ["
                 + str(start_page)
                 + "-"
@@ -164,12 +157,12 @@ proposal = (
     .strip()
 )
 proposal = (
-    proposal[:20]
+    proposal[:50]
     .replace(" ", "_")
     .replace("[", "")
     .replace("]", "")
     .replace(".", "_")
-    .replace(":", "_")
+    .replace(":", "")
     .replace("-", "_")
 )
 proposal += ".pdf"
@@ -182,6 +175,13 @@ print(f"Saving to: `{outfp}`")
 
 if args.extraction_engine == "pdftk":
     print("Using pdftk to extract pages")
+    # You can reference page numbers in reverse order by prefixing them with the letter r.
+    # For example, page r1 is the last page of the document,
+    # r2 is the next-to-last page of the document,
+    # and rend is the first page of the document.
+    # You can use this prefix in ranges, too, for example r3-r1 is the last three pages of a PDF.
+    if end_page is None:
+        end_page = "r1"
     cmd = [
         "pdftk",
         args.file,
@@ -194,6 +194,10 @@ if args.extraction_engine == "pdftk":
 
 elif args.extraction_engine == "qpdf":
     print("Using qpdf to extract pages")
+    # From qpdf documentation:
+    # A number preceded by r counts from the end, so r1 is the last page, r2 is the second-to-last page, etc.
+    if end_page is None:
+        end_page = "r1"
     cmd = [
         "qpdf",
         "--empty",
@@ -207,6 +211,9 @@ elif args.extraction_engine == "qpdf":
 
 elif args.extraction_engine == "pdfjam":
     print("Using pdfjam to extract pages")
+    # In pdfjam, the last page corresponds to the empty string
+    if end_page is None:
+        end_page = ""
     cmd = [
         "pdfjam",
         args.file,
