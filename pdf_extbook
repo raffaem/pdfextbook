@@ -11,7 +11,8 @@ import readline
 import argparse
 import re
 from pathlib import Path
-from dataclasses import dataclass
+import numpy as np
+import json
 
 
 def rlinput(prompt, prefill=""):
@@ -53,7 +54,8 @@ def ask_for_output(choice):
 
 
 def extract_bookmark(infp, choice, outfp):
-    print(f"Saving to: `{outfp}`")
+    lead = "\t"
+    print(f"{lead}Saving to: `{outfp}`")
     # Actually extract the pages
     # Get page boundaries
     pages = choice.split(" ")[-1][1:-1].split("-")
@@ -61,12 +63,14 @@ def extract_bookmark(infp, choice, outfp):
     #
     # Use pdftk
     if args.extraction_engine == "pdftk":
-        print("Using pdftk to extract pages")
-        # You can reference page numbers in reverse order by prefixing them with the letter r.
+        print(f"{lead}Using pdftk to extract pages")
+        # You can reference page numbers in reverse order
+        # by prefixing them with the letter r.
         # For example, page r1 is the last page of the document,
         # r2 is the next-to-last page of the document,
         # and rend is the first page of the document.
-        # You can use this prefix in ranges, too, for example r3-r1 is the last three pages of a PDF.
+        # You can use this prefix in ranges, too,
+        # for example r3-r1 is the last three pages of a PDF.
         if end_page == "":
             end_page = "r1"
         cmd = [
@@ -81,9 +85,10 @@ def extract_bookmark(infp, choice, outfp):
     #
     # Use qpdf
     elif args.extraction_engine == "qpdf":
-        print("Using qpdf to extract pages")
+        print(f"{lead}Using qpdf to extract pages")
         # From qpdf documentation:
-        # A number preceded by r counts from the end, so r1 is the last page, r2 is the second-to-last page, etc.
+        # A number preceded by r counts from the end, so r1 is the last page,
+        # r2 is the second-to-last page, etc.
         if end_page == "":
             end_page = "r1"
         cmd = [
@@ -99,7 +104,7 @@ def extract_bookmark(infp, choice, outfp):
     #
     # Use pdfjam
     elif args.extraction_engine == "pdfjam":
-        print("Using pdfjam to extract pages")
+        print(f"{lead}Using pdfjam to extract pages")
         # In pdfjam, the last page corresponds to the empty string
         if end_page == "":
             end_page = ""
@@ -155,6 +160,21 @@ parser.add_argument(
     choices={"pdftk", "qpdf", "pdfjam"}
 )
 parser.add_argument(
+    "-p",
+    "--end-page-mode",
+    help=("How to find the end page of a bookmark "
+          "(PDF bookmarks point to a single page). "
+          "If `exact`, bookmark ends when another bookmark "
+          "at the same hierarchical level is encountered "
+          "(or at the last page), "
+          "if `less`, bookmark ends when another bookmark "
+          "at the same or at a higher hierarchical level is encountered "
+          "(or at the last page if there aren't any)."),
+    default="exact",
+    type=str,
+    choices={"exact", "less"}
+)
+parser.add_argument(
     "file",
     help="The PDF file from which to extract bookmarks."
 )
@@ -190,9 +210,9 @@ for m in re.finditer(pat, bl2, re.MULTILINE):
 assert len(titles) == len(levels)
 assert len(titles) == len(pages)
 
+# List relevant bookmarks with their start and end page (which we need to find)
 it = enumerate(zip(titles, levels, pages))
-choices = ""
-# Write bookmarks in a file that will be read by fzf
+choices = list()
 for i, (title, level, start_page) in it:
     if (
         args.max_level
@@ -209,22 +229,36 @@ for i, (title, level, start_page) in it:
         and level != int(args.all_levels[0])
     ):
         continue
-    try:
-        pos = (
-            levels[i + 1:].index(level)
-            + i
-            + 1
-        )
-        end_page = pages[pos] - 1
-    except ValueError:
+    # Get end page
+    levels2 = np.asarray(levels[i + 1:])
+    pages2 = np.asarray(pages[i + 1:])
+    if len(levels2) == 0:
         end_page = ""
-    choices += (title +
-                " [" +
-                str(start_page) +
-                "-" +
-                str(end_page) +
-                "]\n"
-                )
+    else:
+        # print("levels2="+str(levels2))
+        # print("level="+str(level))
+        if args.end_page_mode == "exact":
+            cond = np.asarray(levels2 == level).nonzero()
+            # print("cond="+str(cond))
+        if args.end_page_mode == "less":
+            cond = np.asarray(levels2 <= level).nonzero()
+            # print("cond="+str(cond))
+        next_pos = cond[0][0]
+        # print("next_pos="+str(next_pos))
+        end_page = pages2[next_pos]-1
+        # print("end_page="+str(end_page))
+        if end_page == -1:
+            end_page = ""
+    # Append bookmark to list of possible choices
+    choices.append(title +
+                   " [" +
+                   str(start_page) +
+                   "-" +
+                   str(end_page) +
+                   "]"
+                   )
+print(json.dumps(choices, indent=4, ensure_ascii=False))
+choices = "\n".join(choices)
 
 # Ask user which bookmark to extract with fzf
 if (args.all_levels is None):
@@ -245,7 +279,6 @@ if (args.all_levels is None):
 else:
     print("Extracting all levels")
     choices = choices.splitlines()
-    print(choices)
     for i, choice in enumerate(choices):
         print(choice)
         outfp = args.all_levels[1] + str(i) + ".pdf"
