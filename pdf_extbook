@@ -155,7 +155,7 @@ parser.add_argument(
     "-E",
     "--extraction-engine",
     help="Engine used to extract pages from PDF. Can be pdftk (default), qpdf, pdfjam.",
-    default="pdftk",
+    default="qpdf",
     type=str,
     choices={"pdftk", "qpdf", "pdfjam"}
 )
@@ -170,7 +170,7 @@ parser.add_argument(
           "if `less`, bookmark ends when another bookmark "
           "at the same or at a higher hierarchical level is encountered "
           "(or at the last page if there aren't any)."),
-    default="exact",
+    default="less",
     type=str,
     choices={"exact", "less"}
 )
