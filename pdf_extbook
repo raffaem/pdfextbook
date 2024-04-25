@@ -235,20 +235,17 @@ for i, (title, level, start_page) in it:
     if len(levels2) == 0:
         end_page = ""
     else:
-        # print("levels2="+str(levels2))
-        # print("level="+str(level))
         if args.end_page_mode == "exact":
             cond = np.asarray(levels2 == level).nonzero()
-            # print("cond="+str(cond))
         if args.end_page_mode == "less":
             cond = np.asarray(levels2 <= level).nonzero()
-            # print("cond="+str(cond))
-        next_pos = cond[0][0]
-        # print("next_pos="+str(next_pos))
-        end_page = pages2[next_pos]-1
-        # print("end_page="+str(end_page))
-        if end_page == -1:
+        if len(cond[0]) == 0:
             end_page = ""
+        else:
+            next_pos = cond[0][0]
+            end_page = pages2[next_pos]-1
+            if end_page == -1:
+                end_page = ""
     # Append bookmark to list of possible choices
     choices.append(title +
                    " [" +
