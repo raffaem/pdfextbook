@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "pdfextbook"
+version = "0.0.2"
+description = "Extract pages from PDF on bookmark boundaries. "
+authors = ["Raffaele Mancuso <raffaelemancuso532@gmail.com>"]
+license = "MIT"
+readme = "README.md"
+packages = [{include = "pdfextbook"}]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+numpy = "^2.1.2"
+
+[tool.poetry.scripts]
+pdfextbook = 'pdfextbook.pdfextbook:main'
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
