@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "pdfextbook"
-version = "0.0.2"
+version = "0.0.3"
 description = "Extract pages from PDF on bookmark boundaries. "
 authors = ["Raffaele Mancuso <raffaelemancuso532@gmail.com>"]
 license = "MIT"
