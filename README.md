@@ -1,4 +1,4 @@
-# pdf_extbook
+# pdfextbook
 
 Extract pages from PDF files on bookmark boundaries.
 
