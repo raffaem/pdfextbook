@@ -1,5 +1,9 @@
 # pdfextbook
 
+## Archived
+
+Use [PDFsam basic](https://github.com/torakiki/pdfsam) instead. It's FLOSS, has a GUI, and better maintained.
+
 ## Introduction
 
 Extract pages from PDF files on bookmark boundaries.
